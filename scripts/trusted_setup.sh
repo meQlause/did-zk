@@ -19,7 +19,7 @@
 set -e
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CIRCUITS_DIR="circuits"
+CIRCUITS_DIR="../circuits"
 BUILD_DIR="build"
 POT_DIR="$BUILD_DIR/pot"
 POT_POWER=14              # 2^14 = 16384 constraints max; increase if needed
