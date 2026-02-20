@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZK Credential — Proof Generator</title>
+  <link rel="stylesheet" href="main.css" />
+</head>
+
+<body>
+
+  <!-- ── Nav ── -->
+  <nav>
+    <a class="brand" href="#">⬡ ZK-CRED</a>
+    <a href="prover.html" class="active">Proof Generator</a>
+    <a href="verifier.html">Verifier</a>
+  </nav>
+
+  <div class="app">
+
+    <!-- ── Page header ── -->
+    <div class="page-header">
+      <div class="chip"><span class="dot"></span>Prover · Groth16 · Circom 2.0</div>
+      <h1>Proof <em>Generator</em></h1>
+      <p class="sub">// enter predefined credential hash → define private fields → set verifier rules → generate proofs
+      </p>
+    </div>
+
+    <!-- ── Step 1: Credential Hash ── -->
+    <div class="card">
+      <div class="card-head">
+        <span>🔗</span>
+        <span class="card-label">Credential Hash</span>
+        <span class="lock-tag">🌐 public · predefined by issuer</span>
+      </div>
+      <div class="card-body">
+        <input class="hash-input" id="credHash" type="text" placeholder="0x5abc562527cc3f1d..."
+          value="0x5162bc2a2a9f4e3d1c7b8a6f2e4d9c1b7a3f5e2d8c4b6a1f3e5d7c9b2a4f6e8" />
+      </div>
+    </div>
+
+    <!-- ── Step 2: Credential Fields ── -->
+    <div class="card">
+      <div class="card-head">
+        <span>🗂</span>
+        <span class="card-label">Credential Fields</span>
+        <span class="lock-tag">🔒 private · prover only</span>
+      </div>
+      <div class="card-body">
+        <div class="fields-grid" id="fieldList"></div>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" id="btnAddField">＋ Field</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Step 3: Verifier Rules ── -->
+    <div class="card">
+      <div class="card-head">
+        <span>✅</span>
+        <span class="card-label">Verifier Requirements</span>
+        <span class="lock-tag">🌐 public · what verifier checks</span>
+      </div>
+      <div class="card-body">
+        <div id="ruleList"></div>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" id="btnAddRule">＋ Rule</button>
+          <button class="btn btn-primary btn-full" id="btnProve">⬡ Generate Proofs</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Output ── -->
+    <div id="out" style="display:none">
+      <div class="sep">
+        <div class="sep-line"></div>
+        <div class="sep-text">Proof Output</div>
+        <div class="sep-line"></div>
+      </div>
+
+      <div id="proofList"></div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="card-head">
+          <span>📋</span>
+          <span class="card-label">Circuit Witness Inputs</span>
+        </div>
+        <div class="card-body">
+          <div class="circuit-out" id="codeOut"></div>
+        </div>
+      </div>
+
+      <div class="export-actions">
+        <button class="btn btn-ghost btn-sm" id="btnCopyCode">📋 Copy Inputs</button>
+        <button class="btn btn-ghost btn-sm" id="btnExport">↓ Export proof-bundle.json</button>
+        <button class="btn btn-success btn-sm" id="btnSendVerifier">→ Send to Verifier</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="prover.js"></script>
+</body>
+
+</html>
