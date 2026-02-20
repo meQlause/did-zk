@@ -6,15 +6,17 @@ include "circomlib/circuits/comparators.circom";
 /*
  ═══════════════════════════════════════════════════════════════════
   validators.circom
-  One template per (type, operation) combination.
+  Pure template library — ONE template per (type, operation).
+  No `component main` here. Each entry-point file includes this
+  file and declares its own `component main`.
 
   All validators share the same pattern:
     Private:  value, key, typ
     Public:   constraint inputs + fieldHash + credentialRoot
     Output:   valid (0 or 1)
 
-  Step 1 in every validator: re-derive fieldHash and assert equality.
-    This proves the private value is the one committed in the credential.
+  Step 1: re-derive fieldHash and assert equality.
+          Proves the private value is the one committed in the credential.
   Step 2: evaluate the specific constraint.
  ═══════════════════════════════════════════════════════════════════
 */
@@ -34,13 +36,14 @@ template NumberGTValidator() {
     signal input credentialRoot;
     signal output valid;
 
+    // Step 1: bind private value to the committed fieldHash
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
-    // value > threshold  ↔  value >= threshold + 1
+    // Step 2: value > threshold  ↔  value >= threshold + 1
     component gt = GreaterEqThan(64);
     gt.in[0] <== value;
     gt.in[1] <== threshold + 1;
@@ -63,12 +66,14 @@ template NumberRangeValidator() {
     signal input credentialRoot;
     signal output valid;
 
+    // Step 1
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
+    // Step 2
     component geMin = GreaterEqThan(64);
     geMin.in[0] <== value;
     geMin.in[1] <== minVal;
@@ -94,12 +99,14 @@ template NumberEQValidator() {
     signal input credentialRoot;
     signal output valid;
 
+    // Step 1
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
+    // Step 2
     component eq = IsEqual();
     eq.in[0] <== value;
     eq.in[1] <== threshold;
@@ -111,10 +118,10 @@ template NumberEQValidator() {
    Type:   Date (3)
    Encoding: YYYY-MM-DD → YYYYMMDD integer (e.g. 19990115)
    Proves: afterDate <= value <= beforeDate
-   For gt/lt: set the other bound to 0 or a far-future date.
+   For open-ended bounds: afterDate = 0  or  beforeDate = 99991231
 */
 template DateRangeValidator() {
-    signal input value;         // date as YYYYMMDD integer
+    signal input value;         // date as YYYYMMDD integer (private)
     signal input key;
     signal input typ;           // must be 3
     signal input afterDate;     // inclusive lower bound (public)
@@ -123,12 +130,14 @@ template DateRangeValidator() {
     signal input credentialRoot;
     signal output valid;
 
+    // Step 1
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
+    // Step 2
     component geAfter = GreaterEqThan(32);
     geAfter.in[0] <== value;
     geAfter.in[1] <== afterDate;
@@ -155,12 +164,14 @@ template TextHashEQValidator() {
     signal input credentialRoot;
     signal output valid;
 
+    // Step 1
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
+    // Step 2: compare hashes, never expose raw value
     component vh = Poseidon(1);
     vh.inputs[0] <== value;
 
@@ -173,47 +184,31 @@ template TextHashEQValidator() {
 
 /* ─── AttachmentFileValidator ──────────────────────────────────────
    Type:   Attachment File (4)
+   The field VALUE is already a doc hash (not a secret scalar).
+   Proves: stored_doc_hash == expectedDocHash  (direct equality)
 
-   An Attachment field VALUE is already a hash — the fingerprint of a
-   referenced external document (another credential, contract, etc.).
-
-   Validation = direct equality: stored_hash == expectedDocHash.
-   No secondary hashing is applied (unlike text fields) because the
-   value itself is a document reference, not a secret value.
-
-   Private:  value (the doc hash stored in the field), key, typ
+   Private:  value (doc hash stored in the field), key, typ
    Public:   expectedDocHash, fieldHash, credentialRoot
 */
 template AttachmentFileValidator() {
-    signal input value;            // the doc hash stored in the field (as felt)
+    signal input value;            // doc hash stored in the field (private)
     signal input key;
     signal input typ;              // must be 4
-    signal input expectedDocHash;  // exact doc hash the verifier expects (public)
-    signal input fieldHash;        // committed field hash inside credential (public)
-    signal input credentialRoot;   // the known credential root (public)
+    signal input expectedDocHash;  // exact hash the verifier expects (public)
+    signal input fieldHash;
+    signal input credentialRoot;
     signal output valid;
 
-    // Step 1: Prove field membership
+    // Step 1
     component fh = Poseidon(3);
     fh.inputs[0] <== key;
     fh.inputs[1] <== typ;
     fh.inputs[2] <== value;
     fh.out === fieldHash;
 
-    // Step 2: Direct equality — value IS a hash, no wrapping
+    // Step 2: direct equality — value IS a hash, no wrapping needed
     component eq = IsEqual();
     eq.in[0] <== value;
     eq.in[1] <== expectedDocHash;
     valid <== eq.out;
 }
-
-
-// ── Compiled entry points (one per circuit file in production) ────────────────
-// In production each template lives in its own file with a `component main` line:
-//
-//   number_gt.circom:          component main {public [...]} = NumberGTValidator();
-//   number_range.circom:       component main {public [...]} = NumberRangeValidator();
-//   number_eq.circom:          component main {public [...]} = NumberEQValidator();
-//   date_range.circom:         component main {public [...]} = DateRangeValidator();
-//   text_hash_eq.circom:       component main {public [...]} = TextHashEQValidator();
-//   attachment_hash_eq.circom: component main {public [...]} = AttachmentFileValidator();

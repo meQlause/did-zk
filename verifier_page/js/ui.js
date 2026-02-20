@@ -10,7 +10,7 @@ import {
   circuitFor,
   fieldHash,
   opsFor,
-} from "../../verifier_page/constants.js";
+} from "./constants.js";
 
 // ── Type pill HTML ────────────────────────────────────────────────────────────
 export function typePill(typeIndex) {

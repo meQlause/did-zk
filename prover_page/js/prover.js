@@ -6,11 +6,11 @@
 import {
   FT, FT_NAMES, opsFor, buildProofBundle, fieldHash, encodeValue, encodeKey,
   poseidon, circuitFor, opSym, evalConstraint,
-} from 'constants.js';
+} from './constants.js';
 import {
   renderFieldRow, renderRuleRow, renderProofItem,
   renderCircuitCode, statusBanner,
-} from 'ui.js';
+} from './ui.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let fields = [

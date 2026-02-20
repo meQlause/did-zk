@@ -3,8 +3,8 @@
  * Logic for the Proof Verifier page (verifier.html)
  */
 
-import { FT_NAMES, opSym, circuitFor, fieldHash } from "constants.js";
-import { renderProofItem, statusBanner } from "ui.js";
+import { FT_NAMES, opSym, circuitFor, fieldHash } from "./constants.js";
+import { renderProofItem, statusBanner } from "./ui.js";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const bundleInputEl = document.getElementById("bundleInput");

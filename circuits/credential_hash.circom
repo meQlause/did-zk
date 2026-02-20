@@ -1,12 +1,12 @@
 pragma circom 2.0.0;
 
 include "circomlib/circuits/poseidon.circom";
-include "circomlib/circuits/comparators.circom";
 
 /*
  ═══════════════════════════════════════════════════════════════════
   credential_hash.circom
-  Hashing templates shared by all validator circuits.
+  Shared hashing templates — included by every validator circuit.
+  No `component main` here.
  ═══════════════════════════════════════════════════════════════════
 */
 
@@ -14,7 +14,8 @@ include "circomlib/circuits/comparators.circom";
   CredentialFieldHasher
   ─────────────────────
   Computes: fieldHash = Poseidon(key, typ, value)
-  Binds the value to its key and type — you cannot swap values between fields.
+  Binds the value to its key and type so values cannot be swapped
+  between fields.
 */
 template CredentialFieldHasher() {
     signal input key;      // field key encoded as felt
@@ -33,8 +34,9 @@ template CredentialFieldHasher() {
   CredentialRootHasher(N)
   ───────────────────────
   Chain-hashes N field hashes into one root:
-    root = Poseidon(…Poseidon(Poseidon(h0,h1),h2)…,hN-1)
+    root = Poseidon(…Poseidon(Poseidon(h0, h1), h2)…, hN-1)
   Pad unused slots with 0.
+  N must be >= 2.
 */
 template CredentialRootHasher(N) {
     signal input  fieldHashes[N];
