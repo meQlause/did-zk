@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build_zk/
+*.zkey
+*.ptau
+*.r1cs
+*.wasm
+*.sym
+proof.json
+public.json
+verification_key.json

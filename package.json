@@ -1,0 +1,25 @@
+{
+  "name": "did-zk",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge DID Implementation",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "demo": "ts-node src/identity_tree.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.4.0",
+    "@noble/secp256k1": "^2.0.0",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
+    "snarkjs": "^0.7.6"
+  },
+  "devDependencies": {
+    "@types/circomlibjs": "^0.1.6",
+    "@types/node": "^20.0.0",
+    "@types/snarkjs": "^0.7.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
