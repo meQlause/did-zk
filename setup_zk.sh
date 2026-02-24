@@ -9,7 +9,7 @@ set -euo pipefail
 CircuitName="selective_disclosure"
 CircuitsDir="circuits"
 BuildDir="build_zk"
-PtauSize=12   # 2^12 = 4096 constraints
+PtauSize=14   # 2^14 = 16384 constraints
 InputsDir="zk_inputs"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ ENTRIES=$(node -e "
 ")
 
 # ── Per-type labels for public signals ────────────────────────────────────
-SIG_LABELS=("credentialRoot" "walletAddress" "threshold" "expectedValueHash")
+SIG_LABELS=("key" "credentialRoot" "walletAddress" "threshold" "expectedValueHash")
 
 PASS=0
 FAIL=0
@@ -208,10 +208,11 @@ while IFS='|' read -r INPUT_FILE LABEL TYPE_ID; do
   echo "     Public signals:"
   node -e "
     const sigs  = JSON.parse(require('fs').readFileSync('${PUBLIC_FILE}','utf8'));
-    const lbls  = ['credentialRoot','walletAddress','threshold','expectedValueHash'];
+    const lbls  = ['key','credentialRoot','walletAddress','threshold','expectedValueHash'];
     sigs.forEach((v,i) => {
       const short = v.length > 24 ? v.slice(0,24)+'...' : v;
-      console.log('       ['+i+'] '+lbls[i].padEnd(20)+' = '+short);
+      const label = lbls[i] || 'unknown';
+      console.log('       ['+i+'] '+label.padEnd(20)+' = '+short);
     });
   "
 

@@ -59,7 +59,6 @@ template IsNumericType() {
 template SelectiveDisclosure() {
 
     // ── Private inputs ───────────────────────────────────────────────────────
-    signal input key;
     signal input typ;
     signal input value;
     signal input salt;
@@ -68,6 +67,7 @@ template SelectiveDisclosure() {
     signal input identitySecret;
 
     // ── Public inputs ────────────────────────────────────────────────────────
+    signal input key;
     signal input credentialRoot;
     signal input walletAddress;
     signal input threshold;
@@ -164,4 +164,4 @@ template SelectiveDisclosure() {
     hashOk === 0;
 }
 
-component main {public [credentialRoot, walletAddress, threshold, expectedValueHash]} = SelectiveDisclosure();
+component main {public [key, credentialRoot, walletAddress, threshold, expectedValueHash]} = SelectiveDisclosure();

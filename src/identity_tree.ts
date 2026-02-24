@@ -89,7 +89,6 @@ export interface CredentialField {
 
 export interface ProofInput {
   // Private — stays on the owner's device
-  key: string;
   typ: string;
   value: string;
   salt: string;
@@ -97,6 +96,7 @@ export interface ProofInput {
   pathIndices: number[];
   identitySecret: string;
   // Public — shared with verifier
+  key: string;
   credentialRoot: string;
   walletAddress: string;
   threshold: string;
@@ -656,6 +656,7 @@ async function demo() {
     } else {
       console.log(`     expectedValueHash= ${input.expectedValueHash.slice(0, 28)}...`);
     }
+    console.log(`     key              = ${input.key}`);
     console.log(`     credentialRoot   = ${input.credentialRoot.slice(0, 28)}...`);
     console.log(`     walletAddress    = ${input.walletAddress.slice(0, 28)}...\n`);
   }

@@ -34,10 +34,11 @@ import * as fs from "fs";
  *   index 3 → expectedValueHash
  */
 const PUBLIC_SIGNAL_INDEX = {
-  credentialRoot: 0,
-  walletAddress: 1,
-  threshold: 2,
-  expectedValueHash: 3,
+  key: 0,
+  credentialRoot: 1,
+  walletAddress: 2,
+  threshold: 3,
+  expectedValueHash: 4,
 } as const;
 
 export interface ProofBundle {
@@ -47,6 +48,8 @@ export interface ProofBundle {
 
 export interface VerificationRequest {
   proofBundle: ProofBundle;
+  /** The key the verifier expects to see */
+  expectedKey: bigint;
   /** The on-chain Merkle root the verifier trusts (read from contract) */
   expectedCredentialRoot: bigint;
   /** The wallet address the verifier is authenticating */
@@ -94,6 +97,14 @@ export async function verifySelectiveDisclosure(
   // 3. Re-check public signals against verifier-controlled trusted values
   //    This prevents a prover from submitting a valid proof with DIFFERENT
   //    public signals (e.g. a lower threshold or a different wallet).
+
+  const proofKey = BigInt(publicSignals[PUBLIC_SIGNAL_INDEX.key]);
+  if (proofKey !== req.expectedKey) {
+    return {
+      valid: false,
+      reason: `key mismatch: got ${proofKey}, expected ${req.expectedKey}`,
+    };
+  }
 
   const proofRoot = BigInt(publicSignals[PUBLIC_SIGNAL_INDEX.credentialRoot]);
   if (proofRoot !== req.expectedCredentialRoot) {
@@ -147,6 +158,7 @@ export async function proveAndVerify(params: {
   wasmPath: string;
   zkeyPath: string;
   verificationKeyPath: string;
+  expectedKey: bigint;
   expectedCredentialRoot: bigint;
   expectedWalletAddress: bigint;
   requiredThreshold?: bigint;
@@ -171,7 +183,8 @@ export async function proveAndVerify(params: {
   console.log("\n━━━ Verifying proof ━━━");
   const result = await verifySelectiveDisclosure(params.verificationKeyPath, {
     proofBundle: { proof, publicSignals },
-    expectedCredentialRoot: params.expectedCredentialRoot,
+    expectedKey: params.expectedKey,
+    expectedCredentialRoot: params.expectedCredentialRoot
     expectedWalletAddress: params.expectedWalletAddress,
     requiredThreshold: params.requiredThreshold,
     requiredValueHash: params.requiredValueHash,
@@ -220,6 +233,7 @@ export async function verifyFromFiles(params: {
   proofPath: string;          // proof.json from snarkjs
   publicSignalsPath: string;  // public.json from snarkjs
   verificationKeyPath: string;
+  expectedKey: bigint;
   expectedCredentialRoot: bigint;
   expectedWalletAddress: bigint;
   requiredThreshold?: bigint;
@@ -232,7 +246,8 @@ export async function verifyFromFiles(params: {
 
   const result = await verifySelectiveDisclosure(params.verificationKeyPath, {
     proofBundle: { proof, publicSignals },
-    expectedCredentialRoot: params.expectedCredentialRoot,
+    expectedKey: params.expectedKey,
+    expectedCredentialRoot: params.expectedCredentialRoot
     expectedWalletAddress: params.expectedWalletAddress,
     requiredThreshold: params.requiredThreshold,
     requiredValueHash: params.requiredValueHash,
