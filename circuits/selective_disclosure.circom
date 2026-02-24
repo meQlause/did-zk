@@ -1,9 +1,8 @@
 pragma circom 2.1.6;
 
-include "node_modules/circomlib/circuits/poseidon.circom";
-include "node_modules/circomlib/circuits/comparators.circom";
-include "node_modules/circomlib/circuits/switcher.circom";
-include "node_modules/circomlib/circuits/mux1.circom";
+include "circomlib/circuits/poseidon.circom";
+include "circomlib/circuits/comparators.circom";
+include "circomlib/circuits/switcher.circom";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MerkleProof – depth 8, Poseidon(2) nodes
@@ -11,12 +10,11 @@ include "node_modules/circomlib/circuits/mux1.circom";
 template MerkleProof(depth) {
     signal input leaf;
     signal input pathElements[depth];
-    signal input pathIndices[depth];  // 0 = leaf is left child, 1 = leaf is right child
+    signal input pathIndices[depth];
     signal output root;
 
     component hashers[depth];
     component switchers[depth];
-
     signal levelHashes[depth + 1];
     levelHashes[0] <== leaf;
 
@@ -37,8 +35,7 @@ template MerkleProof(depth) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IsNumericType – returns 1 if typ ∈ {2, 3}
-// Implemented without branching: isNum = isType2 OR isType3
+// IsNumericType – 1 iff typ ∈ {2, 3}
 // ─────────────────────────────────────────────────────────────────────────────
 template IsNumericType() {
     signal input typ;
@@ -52,7 +49,7 @@ template IsNumericType() {
     eq3.in[0] <== typ;
     eq3.in[1] <== 3;
 
-    // out = eq2 + eq3 - eq2*eq3  (OR without overflow, since they can't both be 1)
+    // Boolean OR: a + b - a*b  (safe: they can't both be 1)
     out <== eq2.out + eq3.out - eq2.out * eq3.out;
 }
 
@@ -61,32 +58,30 @@ template IsNumericType() {
 // ─────────────────────────────────────────────────────────────────────────────
 template SelectiveDisclosure() {
 
-    // ── Private inputs ──────────────────────────────────────────────────────
-    signal input key;             // field label identifier
-    signal input typ;             // type enum 0-5
-    signal input value;           // the credential value
-    signal input salt;            // random blinding factor
-    signal input pathElements[8]; // sibling hashes on the Merkle path
-    signal input pathIndices[8];  // 0/1 direction at each level
-    signal input identitySecret;  // secret that binds to walletAddress
+    // ── Private inputs ───────────────────────────────────────────────────────
+    signal input key;
+    signal input typ;
+    signal input value;
+    signal input salt;
+    signal input pathElements[8];
+    signal input pathIndices[8];
+    signal input identitySecret;
 
     // ── Public inputs ────────────────────────────────────────────────────────
-    signal input credentialRoot;    // on-chain Merkle root
-    signal input walletAddress;     // keccak-truncated address stored as field
-    signal input threshold;         // used when typ ∈ {2,3}
-    signal input expectedValueHash; // used when typ ∈ {0,1,4,5}
+    signal input credentialRoot;
+    signal input walletAddress;
+    signal input threshold;
+    signal input expectedValueHash;
 
     // ════════════════════════════════════════════════════════════════════════
-    // 1. WALLET BINDING
-    //    Prove: Poseidon(identitySecret) == walletAddress
+    // 1. WALLET BINDING  –  Poseidon(identitySecret) === walletAddress
     // ════════════════════════════════════════════════════════════════════════
     component walletHasher = Poseidon(1);
     walletHasher.inputs[0] <== identitySecret;
     walletHasher.out === walletAddress;
 
     // ════════════════════════════════════════════════════════════════════════
-    // 2. LEAF CONSTRUCTION
-    //    leaf = Poseidon(key, typ, value, salt)
+    // 2. LEAF CONSTRUCTION  –  Poseidon(key, typ, value, salt)
     // ════════════════════════════════════════════════════════════════════════
     component leafHasher = Poseidon(4);
     leafHasher.inputs[0] <== key;
@@ -106,39 +101,65 @@ template SelectiveDisclosure() {
     merkle.root === credentialRoot;
 
     // ════════════════════════════════════════════════════════════════════════
-    // 4. CONDITIONAL CLAIM VERIFICATION
-    //
-    //    isNumeric = 1  →  assert value >= threshold
-    //    isNumeric = 0  →  assert Poseidon(value) == expectedValueHash
-    //
-    //    Both checks are computed; only the relevant one is enforced via
-    //    a constraint that evaluates to 0 regardless of the unused branch.
+    // 4. TYPE ROUTING
     // ════════════════════════════════════════════════════════════════════════
     component typeCheck = IsNumericType();
     typeCheck.typ <== typ;
     signal isNumeric <== typeCheck.out;
 
-    // ── 4a. Numeric check: value >= threshold ────────────────────────────────
-    // GreaterEqThan works on n-bit integers. We use 64 bits which covers
-    // dates (up to 99991231) and reasonable numeric credential values.
-    component gte = GreaterEqThan(64);
-    gte.in[0] <== value;
-    gte.in[1] <== threshold;
-    // gte.out == 1 means value >= threshold
+    // ════════════════════════════════════════════════════════════════════════
+    // 4a. NUMERIC CHECK  –  value >= threshold
+    //
+    // ROOT CAUSE OF THE BUG:
+    //   GreaterEqThan(N) internally calls Num2Bits(N) on BOTH inputs.
+    //   When typ is non-numeric (e.g. EMAIL), `value` is a full BN254 field
+    //   element (~254 bits).  Passing it into GreaterEqThan(64) overflows
+    //   Num2Bits(64) and throws "Assert Failed" at witness generation time —
+    //   even though the numeric branch is logically unused.
+    //
+    // FIX (two-part):
+    //   (a) Use GreaterEqThan(252) — wide enough for any value we store.
+    //       252 bits safely covers dates (≤ 2^27), numbers, and field elements.
+    //       Cost: ~252 extra constraints, acceptable for a non-browser prover.
+    //
+    //   (b) Feed the comparator a MASKED value:
+    //           maskedValue = isNumeric * value
+    //       When isNumeric=0 (string type), maskedValue=0, so Num2Bits(252)
+    //       receives 0 — always a valid 252-bit integer regardless of what
+    //       `value` actually is.  The numeric constraint is then trivially
+    //       satisfied (0 >= 0) but we gate the enforcement below so it is
+    //       only checked when isNumeric=1.
+    // ════════════════════════════════════════════════════════════════════════
 
-    // Enforce: if isNumeric == 1, then gte.out must be 1
-    // Constraint: isNumeric * (1 - gte.out) === 0
+    // Mask value to 0 when not a numeric type → Num2Bits never overflows
+    signal maskedValue <== isNumeric * value;
+
+    // Also mask threshold so the comparator input is always valid
+    signal maskedThreshold <== isNumeric * threshold;
+
+    component gte = GreaterEqThan(252);
+    gte.in[0] <== maskedValue;
+    gte.in[1] <== maskedThreshold;
+
+    // Enforce: IF isNumeric THEN gte.out must be 1
+    // isNumeric * (1 - gte.out) === 0
     signal numericOk <== isNumeric * (1 - gte.out);
     numericOk === 0;
 
-    // ── 4b. Hash equality check: Poseidon(value) == expectedValueHash ────────
+    // ════════════════════════════════════════════════════════════════════════
+    // 4b. HASH EQUALITY CHECK  –  Poseidon(value) === expectedValueHash
+    //
+    // This branch always computes Poseidon(value) but only enforces equality
+    // when isNumeric=0.  No overflow risk here because Poseidon accepts any
+    // field element as input.
+    // ════════════════════════════════════════════════════════════════════════
     component valueHasher = Poseidon(1);
     valueHasher.inputs[0] <== value;
 
     signal hashDiff <== valueHasher.out - expectedValueHash;
 
-    // Enforce: if isNumeric == 0, then hashDiff must be 0
-    // Constraint: (1 - isNumeric) * hashDiff === 0
+    // Enforce: IF NOT isNumeric THEN hashDiff must be 0
+    // (1 - isNumeric) * hashDiff === 0
     signal hashOk <== (1 - isNumeric) * hashDiff;
     hashOk === 0;
 }

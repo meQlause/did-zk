@@ -12,6 +12,7 @@
 
 import { buildPoseidon } from "circomlibjs";
 import * as fs from "fs";
+import { createHash } from "crypto";
 import {
   Salt,
   EncryptedSalt,
@@ -22,6 +23,47 @@ import {
   decryptSalt,
   reEncryptSalt,
 } from "./ecies_salt";
+
+const DATA_DIR = "zk_inputs";
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Simulate an attachment hash: SHA-256 a file buffer → truncate to BN254 field.
+ * In production this would be the actual file's hash stored off-chain.
+ */
+function attachmentHash(fakeContent: string): bigint {
+  const BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+  const digest = createHash("sha256").update(fakeContent, "utf8").digest();
+  digest[0] &= 0x1f; // truncate to 253 bits
+  return BigInt("0x" + digest.toString("hex")) % BN254_PRIME;
+}
+
+/** Write a JSON file and log a one-liner summary. */
+function writeJson(filePath: string, data: object, label: string) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  console.log(`  ✅ ${label.padEnd(22)} → ${filePath}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Credential definitions (one per type)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CredentialEntry {
+  index: number;
+  typeName: string;
+  field: CredentialField;
+  /** For numeric/date types: the threshold to prove value >= threshold */
+  threshold?: bigint;
+  /** For hash types: computed from the value after Poseidon init */
+  useValueHash?: true;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -128,7 +170,7 @@ export async function deriveWalletAddress(identitySecret: FieldElement): Promise
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TREE_DEPTH = 8;
-const TREE_SIZE  = 2 ** TREE_DEPTH; // 256
+const TREE_SIZE = 2 ** TREE_DEPTH; // 256
 
 export class IdentityMerkleTree {
   private leaves: FieldElement[] = [];
@@ -166,11 +208,11 @@ export class IdentityMerkleTree {
     await poseidonHasher.init();
 
     this.zeroLeaf = poseidonHasher.hash([0n, 0n, 0n, 0n]);
-    this.leaves   = new Array(TREE_SIZE).fill(this.zeroLeaf);
+    this.leaves = new Array(TREE_SIZE).fill(this.zeroLeaf);
 
     // Generate one salt for the entire identity
     this._plaintextSalt = generateSalt();
-    this.encryptedSalt  = await encryptSalt(this._plaintextSalt, this.ownerPubKey);
+    this.encryptedSalt = await encryptSalt(this._plaintextSalt, this.ownerPubKey);
 
     this.ready = true;
     console.log("✅ Salt generated and encrypted. Plaintext held in memory until sealTree().");
@@ -211,8 +253,8 @@ export class IdentityMerkleTree {
       index,
       leaf: leaf.toString(),
       field: {
-        key:   field.key.toString(),
-        typ:   field.typ.toString(),
+        key: field.key.toString(),
+        typ: field.typ.toString(),
         value: field.value.toString(),
       },
     });
@@ -270,7 +312,7 @@ export class IdentityMerkleTree {
   exportCredentialDocument(): CredentialDocument {
     if (this.layers.length === 0) throw new Error("Call buildTree() first");
     return {
-      ownerPubKey:   this.ownerPubKey,
+      ownerPubKey: this.ownerPubKey,
       encryptedSalt: this.encryptedSalt,
       credentialRoot: this.root.toString(),
       leaves: this.leafMeta,
@@ -321,10 +363,10 @@ export class IdentityMerkleTree {
     const tree = new IdentityMerkleTree(doc.ownerPubKey);
     await poseidonHasher.init();
 
-    tree.zeroLeaf      = poseidonHasher.hash([0n, 0n, 0n, 0n]);
-    tree.leaves        = new Array(TREE_SIZE).fill(tree.zeroLeaf);
+    tree.zeroLeaf = poseidonHasher.hash([0n, 0n, 0n, 0n]);
+    tree.leaves = new Array(TREE_SIZE).fill(tree.zeroLeaf);
     tree.encryptedSalt = doc.encryptedSalt;
-    tree.leafMeta      = doc.leaves;
+    tree.leafMeta = doc.leaves;
 
     // Restore leaves from document metadata
     for (const entry of doc.leaves) {
@@ -404,16 +446,16 @@ export class IdentityMerkleTree {
     const { pathElements, pathIndices } = this.generateMerkleProof(leafIndex);
 
     return {
-      key:            field.key.toString(),
-      typ:            field.typ.toString(),
-      value:          field.value.toString(),
-      salt:           salt.toString(),       // ⚠️ private — stays on device
-      pathElements:   pathElements.map((x) => x.toString()),
+      key: field.key.toString(),
+      typ: field.typ.toString(),
+      value: field.value.toString(),
+      salt: salt.toString(),       // ⚠️ private — stays on device
+      pathElements: pathElements.map((x) => x.toString()),
       pathIndices,
       identitySecret: identitySecret.toString(),
       credentialRoot: this.root.toString(),
-      walletAddress:  walletAddress.toString(),
-      threshold:      threshold.toString(),
+      walletAddress: walletAddress.toString(),
+      threshold: threshold.toString(),
       expectedValueHash: expectedValueHash.toString(),
     };
   }
@@ -433,82 +475,201 @@ export class IdentityMerkleTree {
   }
 }
 
+
+async function buildCredentialEntries(): Promise<CredentialEntry[]> {
+  return [
+    // ── Type 0: TEXT ───────────────────────────────────────────────────────
+    {
+      index: 0,
+      typeName: "TEXT (0)",
+      field: {
+        key: stringToField("full_name"),
+        typ: CredentialType.TEXT,
+        value: stringToField("Alice Wonderland"),
+      },
+      useValueHash: true,
+    },
+
+    // ── Type 1: EMAIL ──────────────────────────────────────────────────────
+    {
+      index: 1,
+      typeName: "EMAIL (1)",
+      field: {
+        key: stringToField("email"),
+        typ: CredentialType.EMAIL,
+        value: stringToField("alice@example.com"),
+      },
+      useValueHash: true,
+    },
+
+    // ── Type 2: NUMBER ─────────────────────────────────────────────────────
+    // Prove: credit_score >= 700
+    {
+      index: 2,
+      typeName: "NUMBER (2)",
+      field: {
+        key: stringToField("credit_score"),
+        typ: CredentialType.NUMBER,
+        value: 750n,
+      },
+      threshold: 700n,   // claim: score >= 700
+    },
+
+    // ── Type 3: DATE ───────────────────────────────────────────────────────
+    // Prove: date_of_birth <= 20070224 (i.e. owner is >= 18 years old as of 2025-02-24)
+    // Circuit proves value >= threshold, so threshold = earliest valid DOB = 00010101,
+    // and verifier enforces pubSignal.threshold >= their own cutoff off-chain.
+    // We prove DOB >= 19000101 (alive) AND verifier checks DOB <= 20070224 separately.
+    // Simpler approach used here: prove DOB field exists and value = specific date.
+    // For a real age gate, threshold should be set to 0 and the verifier checks
+    // pubSignal[walletAddress] + pubSignal[credentialRoot] + DOB hash off-circuit.
+    //
+    // Here we demonstrate the threshold range path: prove DOB >= 19000101.
+    {
+      index: 3,
+      typeName: "DATE (3)",
+      field: {
+        key: stringToField("date_of_birth"),
+        typ: CredentialType.DATE,
+        value: dateToField("1999-03-15"),   // 19990315n
+      },
+      threshold: 19000101n,  // prove owner was born after 1900-01-01
+    },
+
+    // ── Type 4: ATTACHMENT ─────────────────────────────────────────────────
+    // Value is a SHA-256-derived field element of a document hash.
+    // Prove the attachment hash matches the expected hash (document possession).
+    {
+      index: 4,
+      typeName: "ATTACHMENT (4)",
+      field: {
+        key: stringToField("passport_scan"),
+        typ: CredentialType.ATTACHMENT,
+        value: attachmentHash("fake-passport-pdf-bytes-1234"),
+      },
+      useValueHash: true,
+    },
+
+    // ── Type 5: LONG_TEXT ──────────────────────────────────────────────────
+    {
+      index: 5,
+      typeName: "LONG_TEXT (5)",
+      field: {
+        key: stringToField("bio"),
+        typ: CredentialType.LONG_TEXT,
+        value: stringToField("Software engineer based in Jakarta with 10 years of experience."),
+      },
+      useValueHash: true,
+    },
+  ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo
+// Main demo
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function demo() {
-  console.log("━━━ ZK-Identity: Single ECIES Salt Demo ━━━\n");
+  console.log("━━━ ZK-Identity: All Credential Types Demo ━━━\n");
 
-  // ── Owner generates key pair ─────────────────────────────────────────────
+  // ── Owner: generate key pair ─────────────────────────────────────────────
   const ownerKeys: OwnerKeyPair = generateOwnerKeyPair();
-  console.log("Owner pubKey:", ownerKeys.publicKey.slice(0, 20) + "...");
+  console.log(`Owner pubKey : ${ownerKeys.publicKey.slice(0, 24)}...`);
+  console.log(`Owner privKey: [protected]\n`);
+
+  const identitySecret = BigInt(
+    "0x" + createHash("sha256").update("demo-identity-secret-v1").digest("hex")
+  );
+  const walletAddress = await deriveWalletAddress(identitySecret);
+  console.log(`identitySecret : ${identitySecret.toString().slice(0, 24)}...`);
+  console.log(`walletAddress  : ${walletAddress.toString().slice(0, 24)}...\n`);
+
+  // ── Build credential entries ─────────────────────────────────────────────
+  const entries = await buildCredentialEntries();
 
   // ── ISSUER PHASE ─────────────────────────────────────────────────────────
-  console.log("\n── Issuer Phase ──");
+  console.log("── Issuer Phase (pubKey only) ──");
   const tree = new IdentityMerkleTree(ownerKeys.publicKey);
-  await tree.init(); // generates + encrypts ONE salt
+  await tree.init();
 
-  const fields: Array<{ index: number; field: CredentialField }> = [
-    { index: 0, field: { key: stringToField("name"),  typ: CredentialType.TEXT,   value: stringToField("Alice") } },
-    { index: 1, field: { key: stringToField("email"), typ: CredentialType.EMAIL,  value: stringToField("alice@example.com") } },
-    { index: 2, field: { key: stringToField("dob"),   typ: CredentialType.DATE,   value: dateToField("1999-03-15") } },
-    { index: 3, field: { key: stringToField("score"), typ: CredentialType.NUMBER, value: 720n } },
-  ];
-
-  for (const { index, field } of fields) {
-    const leaf = tree.setLeaf(index, field); // synchronous — salt already in memory
-    console.log(`  Leaf[${index}] = ${leaf.toString().slice(0, 30)}...`);
+  for (const entry of entries) {
+    const leaf = tree.setLeaf(entry.index, entry.field);
+    console.log(`  Leaf[${entry.index}] ${entry.typeName.padEnd(16)} = ${leaf.toString().slice(0, 28)}...`);
   }
 
   const root = tree.buildTree();
-  tree.sealTree(); // clears plaintext salt from memory
-  console.log(`  Merkle Root: ${root.toString().slice(0, 30)}...`);
+  tree.sealTree();
+  console.log(`\n  Merkle Root: ${root.toString().slice(0, 32)}...`);
 
-  // Issuer hands this document to the owner
-  tree.saveCredentialDocument("credential.json");
+  const credPath = `${DATA_DIR}/credential.json`;
+  tree.saveCredentialDocument(credPath);
 
   // ── OWNER PHASE ───────────────────────────────────────────────────────────
-  console.log("\n── Owner Phase ──");
+  console.log("\n── Owner Phase (privKey required for each proof) ──");
 
-  // Owner loads the credential document (no live tree object needed)
-  const doc: CredentialDocument = JSON.parse(fs.readFileSync("credential.json", "utf8"));
+  const doc: CredentialDocument = JSON.parse(
+    fs.readFileSync(`${DATA_DIR}/credential.json`, "utf8")
+  );
   const ownerTree = await IdentityMerkleTree.fromCredentialDocument(doc);
 
-  const identitySecret = 0xabcdef1234567890abcdef1234567890n;
-  const walletAddress  = await deriveWalletAddress(identitySecret);
+  // Map: output filename → label shown in build script
+  const proofJobs: Array<{
+    outputFile: string;
+    label: string;
+    entry: CredentialEntry;
+    expectedValueHash: bigint;
+  }> = [];
 
-  // Prove DOB >= threshold (age check)
-  const ageInput = await ownerTree.generateSnarkInput({
-    leafIndex: 2,
-    field: fields[2].field,
-    ownerPrivKey: ownerKeys.privateKey,
-    identitySecret,
-    walletAddress,
-    threshold: 19000101n,
-    expectedValueHash: 0n,
-  });
-  fs.writeFileSync("input_age.json", JSON.stringify(ageInput, null, 2));
-  console.log("  Age proof → input_age.json");
-  console.log("  Public: threshold =", ageInput.threshold, "| root =", ageInput.credentialRoot.slice(0, 20) + "...");
+  for (const entry of entries) {
+    // Compute expectedValueHash for hash-equality types
+    let expectedValueHash = 0n;
+    if (entry.useValueHash) {
+      expectedValueHash = poseidonHasher.hash([entry.field.value]);
+    }
 
-  // Prove email matches a known hash
-  const emailHash = poseidonHasher.hash([fields[1].field.value]);
-  const emailInput = await ownerTree.generateSnarkInput({
-    leafIndex: 1,
-    field: fields[1].field,
-    ownerPrivKey: ownerKeys.privateKey,
-    identitySecret,
-    walletAddress,
-    threshold: 0n,
-    expectedValueHash: emailHash,
-  });
-  fs.writeFileSync("input_email.json", JSON.stringify(emailInput, null, 2));
-  console.log("  Email proof → input_email.json");
-  console.log("  Public: expectedValueHash =", emailInput.expectedValueHash.slice(0, 20) + "...");
+    const slug = entry.typeName.toLowerCase().split(" ")[0]; // "text", "email", etc.
+    proofJobs.push({
+      outputFile: `${DATA_DIR}/input_${slug}.json`,
+      label: entry.typeName,
+      entry,
+      expectedValueHash,
+    });
+  }
 
-  console.log("\n━━━ Done ━━━");
-  console.log("Run: snarkjs groth16 fullProve input_age.json circuit_js/circuit.wasm circuit_final.zkey");
+  console.log();
+  for (const job of proofJobs) {
+    const input = await ownerTree.generateSnarkInput({
+      leafIndex: job.entry.index,
+      field: job.entry.field,
+      ownerPrivKey: ownerKeys.privateKey,
+      identitySecret,
+      walletAddress,
+      threshold: job.entry.threshold ?? 0n,
+      expectedValueHash: job.expectedValueHash,
+    });
+
+    writeJson(job.outputFile, input, job.label);
+
+    // Log public signals for verification
+    const isNumeric = job.entry.threshold !== undefined;
+    if (isNumeric) {
+      console.log(`     threshold        = ${input.threshold}`);
+    } else {
+      console.log(`     expectedValueHash= ${input.expectedValueHash.slice(0, 28)}...`);
+    }
+    console.log(`     credentialRoot   = ${input.credentialRoot.slice(0, 28)}...`);
+    console.log(`     walletAddress    = ${input.walletAddress.slice(0, 28)}...\n`);
+  }
+
+  // Write a manifest so the build script knows which files to prove
+  const manifest = proofJobs.map((j) => ({
+    inputFile: j.outputFile,
+    label: j.label,
+    type: j.entry.field.typ.toString(),
+  }));
+  fs.writeFileSync(`${DATA_DIR}/proof_manifest.json`, JSON.stringify(manifest, null, 2));
+  console.log(`📋 Manifest written → ${DATA_DIR}/proof_manifest.json\n`);
+
+  console.log("━━━ Done — run build.sh to compile and prove all types ━━━");
 }
 
 demo().catch(console.error);

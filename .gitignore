@@ -9,3 +9,5 @@ build_zk/
 proof.json
 public.json
 verification_key.json
+scripts
+zk_inputs/
