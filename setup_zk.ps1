@@ -10,7 +10,7 @@ $CircuitName = "selective_disclosure"
 $CircuitsDir = "circuits"
 $BuildDir = "build_zk"
 $InputsDir = "zk_inputs"
-$PtauSize = 12   # 2^12 = 4096 constraints
+$PtauSize = 14   # 2^14 = 16384 constraints
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Derived paths
@@ -175,7 +175,7 @@ foreach ($entry in $manifest) {
     # Public signals
     Write-Host "     Public signals:"
     $sigs = Get-Content $publicFile | ConvertFrom-Json
-    $lbls = @("credentialRoot", "walletAddress", "threshold", "expectedValueHash")
+    $lbls = @("key", "credentialRoot", "publicCommitment", "threshold", "expectedValueHash")
     for ($i=0; $i -lt $sigs.Count; $i++) {
         $val = $sigs[$i]
         $short = if ($val.Length -gt 24) { $val.Substring(0, 24) + "..." } else { $val }

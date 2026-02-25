@@ -151,7 +151,7 @@ ENTRIES=$(node -e "
 ")
 
 # ── Per-type labels for public signals ────────────────────────────────────
-SIG_LABELS=("key" "credentialRoot" "walletAddress" "threshold" "expectedValueHash")
+SIG_LABELS=("key" "credentialRoot" "publicCommitment" "threshold" "expectedValueHash")
 
 PASS=0
 FAIL=0
@@ -208,7 +208,7 @@ while IFS='|' read -r INPUT_FILE LABEL TYPE_ID; do
   echo "     Public signals:"
   node -e "
     const sigs  = JSON.parse(require('fs').readFileSync('${PUBLIC_FILE}','utf8'));
-    const lbls  = ['key','credentialRoot','walletAddress','threshold','expectedValueHash'];
+    const lbls  = ['key','credentialRoot','publicCommitment','threshold','expectedValueHash'];
     sigs.forEach((v,i) => {
       const short = v.length > 24 ? v.slice(0,24)+'...' : v;
       const label = lbls[i] || 'unknown';

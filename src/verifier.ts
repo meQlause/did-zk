@@ -36,7 +36,7 @@ import * as fs from "fs";
 const PUBLIC_SIGNAL_INDEX = {
   key: 0,
   credentialRoot: 1,
-  walletAddress: 2,
+  publicCommitment: 2,
   threshold: 3,
   expectedValueHash: 4,
 } as const;
@@ -52,8 +52,8 @@ export interface VerificationRequest {
   expectedKey: bigint;
   /** The on-chain Merkle root the verifier trusts (read from contract) */
   expectedCredentialRoot: bigint;
-  /** The wallet address the verifier is authenticating */
-  expectedWalletAddress: bigint;
+  /** The identity commitment the verifier is authenticating */
+  expectedPublicCommitment: bigint;
   /**
    * For numeric/date claims: the minimum value the verifier requires.
    * Set to 0n if this is a string-equality proof.
@@ -114,11 +114,11 @@ export async function verifySelectiveDisclosure(
     };
   }
 
-  const proofWallet = BigInt(publicSignals[PUBLIC_SIGNAL_INDEX.walletAddress]);
-  if (proofWallet !== req.expectedWalletAddress) {
+  const proofCommitment = BigInt(publicSignals[PUBLIC_SIGNAL_INDEX.publicCommitment]);
+  if (proofCommitment !== req.expectedPublicCommitment) {
     return {
       valid: false,
-      reason: `walletAddress mismatch: got ${proofWallet}, expected ${req.expectedWalletAddress}`,
+      reason: `publicCommitment mismatch: got ${proofCommitment}, expected ${req.expectedPublicCommitment}`,
     };
   }
 
@@ -160,7 +160,7 @@ export async function proveAndVerify(params: {
   verificationKeyPath: string;
   expectedKey: bigint;
   expectedCredentialRoot: bigint;
-  expectedWalletAddress: bigint;
+  expectedPublicCommitment: bigint;
   requiredThreshold?: bigint;
   requiredValueHash?: bigint;
 }): Promise<void> {
@@ -184,8 +184,8 @@ export async function proveAndVerify(params: {
   const result = await verifySelectiveDisclosure(params.verificationKeyPath, {
     proofBundle: { proof, publicSignals },
     expectedKey: params.expectedKey,
-    expectedCredentialRoot: params.expectedCredentialRoot
-    expectedWalletAddress: params.expectedWalletAddress,
+    expectedCredentialRoot: params.expectedCredentialRoot,
+    expectedPublicCommitment: params.expectedPublicCommitment,
     requiredThreshold: params.requiredThreshold,
     requiredValueHash: params.requiredValueHash,
   });
@@ -235,7 +235,7 @@ export async function verifyFromFiles(params: {
   verificationKeyPath: string;
   expectedKey: bigint;
   expectedCredentialRoot: bigint;
-  expectedWalletAddress: bigint;
+  expectedPublicCommitment: bigint;
   requiredThreshold?: bigint;
   requiredValueHash?: bigint;
 }): Promise<void> {
@@ -247,8 +247,8 @@ export async function verifyFromFiles(params: {
   const result = await verifySelectiveDisclosure(params.verificationKeyPath, {
     proofBundle: { proof, publicSignals },
     expectedKey: params.expectedKey,
-    expectedCredentialRoot: params.expectedCredentialRoot
-    expectedWalletAddress: params.expectedWalletAddress,
+    expectedCredentialRoot: params.expectedCredentialRoot,
+    expectedPublicCommitment: params.expectedPublicCommitment,
     requiredThreshold: params.requiredThreshold,
     requiredValueHash: params.requiredValueHash,
   });

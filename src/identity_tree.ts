@@ -98,7 +98,7 @@ export interface ProofInput {
   // Public — shared with verifier
   key: string;
   credentialRoot: string;
-  walletAddress: string;
+  publicCommitment: string;
   threshold: string;
   expectedValueHash: string;
 }
@@ -160,7 +160,7 @@ export function dateToField(dateStr: string): FieldElement {
   return BigInt(clean);
 }
 
-export async function deriveWalletAddress(identitySecret: FieldElement): Promise<FieldElement> {
+export async function derivePublicCommitment(identitySecret: FieldElement): Promise<FieldElement> {
   await poseidonHasher.init();
   return poseidonHasher.hash([identitySecret]);
 }
@@ -409,7 +409,7 @@ export class IdentityMerkleTree {
    * @param field           The credential field (must match what was issued)
    * @param ownerPrivKey    Owner's secp256k1 private key hex — device-local
    * @param identitySecret  Owner's Poseidon identity binding secret
-   * @param walletAddress   Poseidon(identitySecret) — public commitment
+   * @param publicCommitment Poseidon(identitySecret) — public commitment
    * @param threshold       For NUMBER/DATE claims; 0n if unused
    * @param expectedValueHash  For TEXT/EMAIL/ATTACHMENT claims; 0n if unused
    */
@@ -418,7 +418,7 @@ export class IdentityMerkleTree {
     field: CredentialField;
     ownerPrivKey: string;
     identitySecret: FieldElement;
-    walletAddress: FieldElement;
+    publicCommitment: FieldElement;
     threshold?: FieldElement;
     expectedValueHash?: FieldElement;
   }): Promise<ProofInput> {
@@ -426,7 +426,7 @@ export class IdentityMerkleTree {
     if (this.layers.length === 0) throw new Error("Call buildTree() / restore first");
 
     const {
-      leafIndex, field, ownerPrivKey, identitySecret, walletAddress,
+      leafIndex, field, ownerPrivKey, identitySecret, publicCommitment,
       threshold = 0n, expectedValueHash = 0n,
     } = params;
 
@@ -454,7 +454,7 @@ export class IdentityMerkleTree {
       pathIndices,
       identitySecret: identitySecret.toString(),
       credentialRoot: this.root.toString(),
-      walletAddress: walletAddress.toString(),
+      publicCommitment: publicCommitment.toString(),
       threshold: threshold.toString(),
       expectedValueHash: expectedValueHash.toString(),
     };
@@ -579,9 +579,9 @@ async function demo() {
   const identitySecret = BigInt(
     "0x" + createHash("sha256").update("demo-identity-secret-v1").digest("hex")
   );
-  const walletAddress = await deriveWalletAddress(identitySecret);
+  const publicCommitment = await derivePublicCommitment(identitySecret);
   console.log(`identitySecret : ${identitySecret.toString().slice(0, 24)}...`);
-  console.log(`walletAddress  : ${walletAddress.toString().slice(0, 24)}...\n`);
+  console.log(`publicCommitment: ${publicCommitment.toString().slice(0, 24)}...\n`);
 
   // ── Build credential entries ─────────────────────────────────────────────
   const entries = await buildCredentialEntries();
@@ -642,7 +642,7 @@ async function demo() {
       field: job.entry.field,
       ownerPrivKey: ownerKeys.privateKey,
       identitySecret,
-      walletAddress,
+      publicCommitment,
       threshold: job.entry.threshold ?? 0n,
       expectedValueHash: job.expectedValueHash,
     });
@@ -658,7 +658,7 @@ async function demo() {
     }
     console.log(`     key              = ${input.key}`);
     console.log(`     credentialRoot   = ${input.credentialRoot.slice(0, 28)}...`);
-    console.log(`     walletAddress    = ${input.walletAddress.slice(0, 28)}...\n`);
+    console.log(`     publicCommitment = ${input.publicCommitment.slice(0, 28)}...\n`);
   }
 
   // Write a manifest so the build script knows which files to prove

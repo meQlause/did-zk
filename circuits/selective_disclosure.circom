@@ -69,16 +69,16 @@ template SelectiveDisclosure() {
     // ── Public inputs ────────────────────────────────────────────────────────
     signal input key;
     signal input credentialRoot;
-    signal input walletAddress;
+    signal input publicCommitment;
     signal input threshold;
     signal input expectedValueHash;
 
     // ════════════════════════════════════════════════════════════════════════
-    // 1. WALLET BINDING  –  Poseidon(identitySecret) === walletAddress
+    // 1. IDENTITY BINDING  –  Poseidon(identitySecret) === publicCommitment
     // ════════════════════════════════════════════════════════════════════════
     component walletHasher = Poseidon(1);
     walletHasher.inputs[0] <== identitySecret;
-    walletHasher.out === walletAddress;
+    walletHasher.out === publicCommitment;
 
     // ════════════════════════════════════════════════════════════════════════
     // 2. LEAF CONSTRUCTION  –  Poseidon(key, typ, value, salt)
@@ -164,4 +164,4 @@ template SelectiveDisclosure() {
     hashOk === 0;
 }
 
-component main {public [key, credentialRoot, walletAddress, threshold, expectedValueHash]} = SelectiveDisclosure();
+component main {public [key, credentialRoot, publicCommitment, threshold, expectedValueHash]} = SelectiveDisclosure();
